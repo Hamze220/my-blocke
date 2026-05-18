@@ -1,18 +1,20 @@
 package com.cylldby.blocker.service
 
 import android.accessibilityservice.AccessibilityService
+import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.PixelFormat
 import android.os.CountDownTimer
 import android.provider.Settings
 import android.util.Log
-import com.cylldby.blocker.BuildConfig
 import android.view.LayoutInflater
 import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
+import android.widget.Button
 import android.widget.TextView
+import com.cylldby.blocker.BuildConfig
 import com.cylldby.blocker.BlockerApp
 import com.cylldby.blocker.R
 import com.cylldby.blocker.data.model.AppRule
@@ -104,6 +106,7 @@ class BlockerAccessibilityService : AccessibilityService() {
         val wm = getSystemService(WINDOW_SERVICE) as WindowManager
         removeOverlay(wm)
 
+        @SuppressLint("InflateParams") // null is correct for WindowManager — there is no parent ViewGroup
         val view = LayoutInflater.from(this).inflate(R.layout.overlay_block_warning, null)
 
         view.findViewById<TextView>(R.id.tvOverlayTitle).text = when (reason) {
@@ -118,11 +121,11 @@ class BlockerAccessibilityService : AccessibilityService() {
             else -> "$appName — daily quota reached"
         }
 
-        val btnEmergency = view.findViewById<android.widget.Button>(R.id.btnEmergencyStop)
+        val btnEmergency = view.findViewById<Button>(R.id.btnEmergencyStop)
         if (reason == REASON_QUICK_BLOCK) {
             btnEmergency?.visibility = View.VISIBLE
             btnEmergency?.setOnClickListener {
-                showEmergencyStopDialog(wm, view)
+                showEmergencyStopDialog(wm)
             }
         } else {
             btnEmergency?.visibility = View.GONE
@@ -157,9 +160,9 @@ class BlockerAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun showEmergencyStopDialog(wm: WindowManager, overlayView: View) {
+    private fun showEmergencyStopDialog(wm: WindowManager) {
         dismissJob?.cancel()
-        val dialog = android.app.AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
+        val dialog = AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
             .setTitle("Emergency Stop?")
             .setMessage("Stop Quick Block? (10s)")
             .setPositiveButton("Stop (10s)") { _, _ ->
@@ -177,11 +180,12 @@ class BlockerAccessibilityService : AccessibilityService() {
         val timer = object : CountDownTimer(10_000, 1000) {
             override fun onTick(ms: Long) {
                 val s = ms / 1000 + 1
+                @SuppressLint("SetTextI18n")
                 btn.text = "Stop (${s}s)"
             }
             override fun onFinish() {
-                btn.text = "Stop"
                 btn.isEnabled = true
+                btn.setText(R.string.btn_emergency_stop)
             }
         }
         timer.start()

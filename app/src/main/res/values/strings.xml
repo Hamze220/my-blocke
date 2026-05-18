@@ -26,4 +26,5 @@
     <string name="quick_block_active">Quick Block Active</string>
     <string name="quick_block_emergency_stop">Emergency Stop</string>
     <string name="quick_block_notification_title">Quick Block active</string>
+    <string name="btn_emergency_stop">Stop</string>
 </resources>
