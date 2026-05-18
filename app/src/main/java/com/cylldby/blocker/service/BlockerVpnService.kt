@@ -8,6 +8,7 @@ import android.net.VpnService
 import android.os.ParcelFileDescriptor
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.cylldby.blocker.BuildConfig
 import com.cylldby.blocker.BlockerApp
 import com.cylldby.blocker.MainActivity
 import com.cylldby.blocker.data.model.SiteUsage
@@ -148,15 +149,24 @@ class BlockerVpnService : VpnService() {
         val output = FileOutputStream(pfd.fileDescriptor)
         val buf    = ByteArray(MTU)
 
-        Log.d(TAG, "Packet loop started")
+        Log.i(TAG, "Packet loop started")
         while (serviceScope.isActive) {
             val len = try { input.read(buf) } catch (_: Exception) { break }
-            if (len <= 0) continue
+            if (len < 28) continue  // too small for IPv4 + UDP header + minimal DNS
+
+            // Inline pre-filter: skip non-IPv4, non-UDP, non-DNS packets without
+            // allocating or launching a coroutine — these are the vast majority.
+            if ((buf[0].toInt() and 0xF0) ushr 4 != 4) continue  // not IPv4
+            if (buf[9].toInt() and 0xFF != 17) continue           // not UDP
+            val ihl = (buf[0].toInt() and 0x0F) * 4
+            if (len < ihl + 8) continue
+            val dstPort = ((buf[ihl + 2].toInt() and 0xFF) shl 8) or (buf[ihl + 3].toInt() and 0xFF)
+            if (dstPort != DNS_PORT) continue                      // not DNS
 
             val packet = buf.copyOf(len)
             serviceScope.launch { handlePacket(packet, output) }
         }
-        Log.d(TAG, "Packet loop ended")
+        Log.i(TAG, "Packet loop ended")
     }
 
     private fun handlePacket(packet: ByteArray, output: FileOutputStream) {
@@ -182,7 +192,7 @@ class BlockerVpnService : VpnService() {
             }
         }
 
-        Log.d(TAG, "DNS query: $domain")
+        if (BuildConfig.DEBUG) Log.d(TAG, "DNS query: $domain")
 
         // Track quota usage for quota domains
         val qDomains = quotaDomains
@@ -211,7 +221,7 @@ class BlockerVpnService : VpnService() {
         }
 
         if (isEffectivelyBlocked(domain)) {
-            Log.d(TAG, "BLOCKING $domain")
+            if (BuildConfig.DEBUG) Log.d(TAG, "BLOCKING $domain")
             postBlockedNotification(domain)
             writeTun(output, buildUdpIpPacket(
                 ip.dstIp, ip.srcIp, DNS_PORT, ip.srcPort,

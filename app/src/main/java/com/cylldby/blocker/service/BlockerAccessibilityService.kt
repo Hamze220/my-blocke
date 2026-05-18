@@ -7,6 +7,7 @@ import android.graphics.PixelFormat
 import android.os.CountDownTimer
 import android.provider.Settings
 import android.util.Log
+import com.cylldby.blocker.BuildConfig
 import android.view.LayoutInflater
 import android.view.View
 import android.view.WindowManager
@@ -55,9 +56,14 @@ class BlockerAccessibilityService : AccessibilityService() {
 
         if (overlayView != null && pkg == "com.android.launcher3") return
 
+        // Skip coroutine launch entirely if neither Quick Block nor any rule applies.
+        // This is the common case (most app switches have nothing to check).
+        val quickBlockActive = QuickBlockManager.isActive(this)
+        if (!quickBlockActive && activeRules.none { it.packageName == pkg }) return
+
         serviceScope.launch {
             // Quick Block check
-            if (QuickBlockManager.isActive(this@BlockerAccessibilityService) &&
+            if (quickBlockActive &&
                 !QuickBlockManager.isAllowed(this@BlockerAccessibilityService, pkg)) {
                 val remaining = QuickBlockManager.getRemainingMs(this@BlockerAccessibilityService)
                 val mins = (remaining / 60_000).toInt()
@@ -75,7 +81,7 @@ class BlockerAccessibilityService : AccessibilityService() {
             val rule = activeRules.find { it.packageName == pkg } ?: return@launch
 
             val reason = checkBlocked(rule) ?: return@launch
-            Log.d(TAG, "Blocking $pkg — $reason")
+            if (BuildConfig.DEBUG) Log.d(TAG, "Blocking $pkg — $reason")
             withContext(Dispatchers.Main) { showBlockingOverlay(rule.appName, reason) }
         }
     }
@@ -83,7 +89,7 @@ class BlockerAccessibilityService : AccessibilityService() {
     private fun checkBlocked(rule: AppRule): String? {
         if (ScheduleChecker.isScheduleBlocked(rule)) return REASON_SCHEDULE
         val used = UsageStatsHelper.getTodayUsageMinutes(this, rule.packageName)
-        Log.d(TAG, "Usage for ${rule.packageName}: ${used}min / ${rule.dailyLimitMinutes}min limit")
+        if (BuildConfig.DEBUG) Log.d(TAG, "Usage for ${rule.packageName}: ${used}min / ${rule.dailyLimitMinutes}min limit")
         if (ScheduleChecker.isQuotaExceeded(rule, used)) return REASON_QUOTA
         return null
     }
