@@ -100,8 +100,8 @@ class SitesFragment : Fragment() {
             setText("0")
         }
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Daily limit in minutes")
-            .setMessage("0 = always block. Enter minutes per day allowed on $domain")
+            .setTitle("Daily limit for $domain")
+            .setMessage("How many minutes per day before blocking?\n0 = block immediately, always.")
             .setView(limitInput)
             .setPositiveButton("Block") { _, _ ->
                 val limit = limitInput.text.toString().toIntOrNull() ?: 0
