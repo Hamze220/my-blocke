@@ -27,4 +27,9 @@
         <item name="shapeAppearanceLargeComponent">@style/ShapeAppearance.Blocker.Large</item>
     </style>
 
+    <style name="Theme.Blocker.Overlay" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@color/overlay_bg</item>
+    </style>
+
 </resources>

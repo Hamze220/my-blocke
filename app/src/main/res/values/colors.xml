@@ -2,9 +2,13 @@
 <resources>
     <!-- Sleek Dark Glassmorphism palette -->
     <color name="glass_bg">#16171A</color>
+    <color name="glass_bg_dark">#16171A</color>
     <color name="glass_surface">#22242A</color>
+    <color name="glass_surface_dark">#22242A</color>
     <color name="glass_surface_dim">#1C1E23</color>
+    <color name="glass_surface_dim_dark">#1C1E23</color>
     <color name="glass_on_surface">#FFFFFF</color>
+    <color name="glass_on_surface_dark">#FFFFFF</color>
     <color name="glass_secondary_text">#9CA3AF</color>
     <color name="glass_tint">#0A84FF</color>
     <color name="glass_tint_dark">#0A84FF</color>
