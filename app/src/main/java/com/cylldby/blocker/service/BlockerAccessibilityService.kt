@@ -44,9 +44,13 @@ class BlockerAccessibilityService : AccessibilityService() {
         private val FREEZER_PACKAGES = setOf(
             "com.transsion.freezer",
             "com.transsion.phonemaster",
+            "com.transsion.powerchecker",
+            "com.transsion.resourcemanager",
             "com.oasisfeng.greenify",
             "com.catchingnow.icebox",
-            "rikka.appops"
+            "rikka.appops",
+            "com.real.clearprocesses",
+            "com.wakasoftware.appfreezer"
         )
     }
 
@@ -61,25 +65,62 @@ class BlockerAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
-        val pkg = event.packageName?.toString() ?: return
-        if (pkg == packageName || pkg == "android") return
+        if (event == null) return
+        val eventType = event.eventType
+        if (eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
+            eventType != AccessibilityEvent.TYPE_VIEW_CLICKED) return
+
+        val pkg = event.packageName?.toString()?.lowercase() ?: return
+        if (pkg == packageName.lowercase() || pkg == "android") return
+
+        val className = event.className?.toString()?.lowercase() ?: ""
+        val eventText = event.text?.joinToString(" ")?.lowercase() ?: ""
+        val contentDesc = event.contentDescription?.toString()?.lowercase() ?: ""
 
         // --- FREEZER GUARD ---
-        if (FREEZER_PACKAGES.contains(pkg)) {
-            Log.w(TAG, "Freezer access attempted ($pkg). Redirecting to Home.")
+        val isFreezerPkg = FREEZER_PACKAGES.contains(pkg)
+        val isFreezerClass = className.contains("freezer") ||
+                (pkg.contains("transsion") && className.contains("freeze"))
+        val isFreezerText = eventText.contains("freezer") || contentDesc.contains("freezer") ||
+                eventText.contains("apps have been frozen") || contentDesc.contains("apps have been frozen") ||
+                (eventText.contains("saving") && eventText.contains("frozen")) ||
+                (contentDesc.contains("saving") && contentDesc.contains("frozen"))
+
+        val rootHasFreezer = if (pkg.contains("transsion") || pkg.contains("launcher") || pkg.contains("phonemaster")) {
+            try {
+                val root = rootInActiveWindow
+                if (root != null) {
+                    val m1 = root.findAccessibilityNodeInfosByText("Freezer")
+                    val m2 = root.findAccessibilityNodeInfosByText("frozen")
+                    val m3 = root.findAccessibilityNodeInfosByText("Freeze")
+                    !m1.isNullOrEmpty() || !m2.isNullOrEmpty() || !m3.isNullOrEmpty()
+                } else false
+            } catch (_: Exception) { false }
+        } else false
+
+        if (isFreezerPkg || isFreezerClass || isFreezerText || rootHasFreezer) {
+            Log.w(TAG, "Freezer screen detected! Blocking access: pkg=$pkg class=$className text=$eventText")
             goHome()
             showBlockingOverlay("Freezer Guard", REASON_TAMPER_SHIELD)
             return
         }
 
-        // --- SETTINGS SELF-DEFENSE ---
-        if (pkg == "com.android.settings" || pkg == "com.google.android.settings") {
-            val eventText = event.text?.joinToString(" ")?.lowercase() ?: ""
-            val contentDesc = event.contentDescription?.toString()?.lowercase() ?: ""
+        // --- SETTINGS & PACKAGE INSTALLER SELF-DEFENSE ---
+        if (pkg.contains("settings") || pkg.contains("packageinstaller")) {
             val isTargetingBlocker = eventText.contains("blocker") || contentDesc.contains("blocker") ||
-                    eventText.contains("force stop") || contentDesc.contains("force stop")
-            if (isTargetingBlocker) {
+                    className.contains("appdetails") || className.contains("deviceadmin")
+            val rootHasBlocker = try {
+                val root = rootInActiveWindow
+                if (root != null) {
+                    val blockerNodes = root.findAccessibilityNodeInfosByText("Blocker")
+                    val actionNodes = root.findAccessibilityNodeInfosByText("Force stop")
+                    val uninstallNodes = root.findAccessibilityNodeInfosByText("Uninstall")
+                    val deactivateNodes = root.findAccessibilityNodeInfosByText("Deactivate")
+                    !blockerNodes.isNullOrEmpty() && (!actionNodes.isNullOrEmpty() || !uninstallNodes.isNullOrEmpty() || !deactivateNodes.isNullOrEmpty())
+                } else false
+            } catch (_: Exception) { false }
+
+            if (isTargetingBlocker || rootHasBlocker) {
                 Log.w(TAG, "Settings tamper attempted against Blocker. Redirecting to Home.")
                 goHome()
                 showBlockingOverlay("Settings Shield", REASON_TAMPER_SHIELD)
@@ -87,10 +128,9 @@ class BlockerAccessibilityService : AccessibilityService() {
             }
         }
 
-        if (overlayView != null && pkg == "com.android.launcher3") return
+        if (overlayView != null && (pkg.contains("launcher") || pkg == "com.android.launcher3")) return
 
         // Skip coroutine launch entirely if neither Quick Block nor any rule applies.
-        // This is the common case (most app switches have nothing to check).
         val quickBlockActive = QuickBlockManager.isActive(this)
         if (!quickBlockActive && activeRules.none { it.packageName == pkg }) return
 
@@ -137,7 +177,7 @@ class BlockerAccessibilityService : AccessibilityService() {
         val wm = getSystemService(WINDOW_SERVICE) as WindowManager
         removeOverlay(wm)
 
-        @SuppressLint("InflateParams") // null is correct for WindowManager — there is no parent ViewGroup
+        @SuppressLint("InflateParams")
         val view = LayoutInflater.from(this).inflate(R.layout.overlay_block_warning, null)
 
         view.findViewById<TextView>(R.id.tvOverlayTitle).text = when (reason) {
@@ -226,12 +266,16 @@ class BlockerAccessibilityService : AccessibilityService() {
     }
 
     private fun goHome() {
-        startActivity(
-            Intent(Intent.ACTION_MAIN).apply {
-                addCategory(Intent.CATEGORY_HOME)
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            }
-        )
+        performGlobalAction(GLOBAL_ACTION_HOME)
+        performGlobalAction(GLOBAL_ACTION_BACK)
+        try {
+            startActivity(
+                Intent(Intent.ACTION_MAIN).apply {
+                    addCategory(Intent.CATEGORY_HOME)
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+            )
+        } catch (_: Exception) {}
     }
 
     private fun removeOverlay(wm: WindowManager) {

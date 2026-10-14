@@ -2,11 +2,13 @@ package com.cylldby.blocker.util
 
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.AppOpsManager
+import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
 import android.os.Process
 import android.provider.Settings
 import android.view.accessibility.AccessibilityManager
+import com.cylldby.blocker.receiver.BlockerDeviceAdminReceiver
 import com.cylldby.blocker.service.BlockerAccessibilityService
 
 object PermissionHelper {
@@ -22,7 +24,6 @@ object PermissionHelper {
     }
 
     fun hasAccessibilityPermission(context: Context): Boolean {
-        // Use AccessibilityManager API — more reliable than string matching in Settings
         val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
         val enabled = am.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
         val target = ComponentName(context, BlockerAccessibilityService::class.java)
@@ -31,7 +32,6 @@ object PermissionHelper {
             it.resolveInfo.serviceInfo.name == target.className
         }) return true
 
-        // Fallback: check the settings string (covers edge cases on some ROMs)
         val flat = target.flattenToString()
         val raw = Settings.Secure.getString(
             context.contentResolver,
@@ -43,8 +43,15 @@ object PermissionHelper {
     fun hasOverlayPermission(context: Context): Boolean =
         Settings.canDrawOverlays(context)
 
+    fun hasDeviceAdminPermission(context: Context): Boolean {
+        val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+        val compName = ComponentName(context, BlockerDeviceAdminReceiver::class.java)
+        return dpm.isAdminActive(compName)
+    }
+
     fun allPermissionsGranted(context: Context): Boolean =
         hasUsageStatsPermission(context) &&
         hasAccessibilityPermission(context) &&
-        hasOverlayPermission(context)
+        hasOverlayPermission(context) &&
+        hasDeviceAdminPermission(context)
 }
