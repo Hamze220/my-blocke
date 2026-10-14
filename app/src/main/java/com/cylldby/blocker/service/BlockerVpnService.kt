@@ -52,7 +52,9 @@ class BlockerVpnService : VpnService() {
         private const val VPN_ADDRESS = "192.168.50.1"
         private const val VPN_DNS     = "192.168.50.5"
 
-        private val UPSTREAM_DNS = InetAddress.getByName("8.8.8.8")
+        // CleanBrowsing Family Filter: blocks porn, adult content, proxy/VPN domains, and enforces SafeSearch
+        private val UPSTREAM_DNS = InetAddress.getByName("185.228.168.168")
+        private val UPSTREAM_DNS_SECONDARY = InetAddress.getByName("185.228.169.168")
         private const val DNS_PORT = 53
         private const val MTU = 32767
 

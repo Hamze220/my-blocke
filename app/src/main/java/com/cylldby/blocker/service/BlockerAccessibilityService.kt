@@ -37,8 +37,17 @@ class BlockerAccessibilityService : AccessibilityService() {
         const val REASON_QUOTA    = "quota"
         const val REASON_SCHEDULE = "schedule"
         const val REASON_QUICK_BLOCK = "quick_block"
+        const val REASON_TAMPER_SHIELD = "tamper_shield"
         private const val TAG              = "BlockerService"
         private const val AUTO_DISMISS_MS  = 6_000L
+
+        private val FREEZER_PACKAGES = setOf(
+            "com.transsion.freezer",
+            "com.transsion.phonemaster",
+            "com.oasisfeng.greenify",
+            "com.catchingnow.icebox",
+            "rikka.appops"
+        )
     }
 
     override fun onServiceConnected() {
@@ -55,6 +64,28 @@ class BlockerAccessibilityService : AccessibilityService() {
         if (event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = event.packageName?.toString() ?: return
         if (pkg == packageName || pkg == "android") return
+
+        // --- FREEZER GUARD ---
+        if (FREEZER_PACKAGES.contains(pkg)) {
+            Log.w(TAG, "Freezer access attempted ($pkg). Redirecting to Home.")
+            goHome()
+            showBlockingOverlay("Freezer Guard", REASON_TAMPER_SHIELD)
+            return
+        }
+
+        // --- SETTINGS SELF-DEFENSE ---
+        if (pkg == "com.android.settings" || pkg == "com.google.android.settings") {
+            val eventText = event.text?.joinToString(" ")?.lowercase() ?: ""
+            val contentDesc = event.contentDescription?.toString()?.lowercase() ?: ""
+            val isTargetingBlocker = eventText.contains("blocker") || contentDesc.contains("blocker") ||
+                    eventText.contains("force stop") || contentDesc.contains("force stop")
+            if (isTargetingBlocker) {
+                Log.w(TAG, "Settings tamper attempted against Blocker. Redirecting to Home.")
+                goHome()
+                showBlockingOverlay("Settings Shield", REASON_TAMPER_SHIELD)
+                return
+            }
+        }
 
         if (overlayView != null && pkg == "com.android.launcher3") return
 
@@ -112,12 +143,14 @@ class BlockerAccessibilityService : AccessibilityService() {
         view.findViewById<TextView>(R.id.tvOverlayTitle).text = when (reason) {
             REASON_SCHEDULE -> "Schedule Limit"
             REASON_QUICK_BLOCK -> "Quick Block"
+            REASON_TAMPER_SHIELD -> "Protection Shield"
             else -> "Daily Limit Reached"
         }
         view.findViewById<TextView>(R.id.tvOverlayMessage).text = when (reason) {
             REASON_SCHEDULE -> "$appName is blocked right now"
             REASON_QUICK_BLOCK -> if (remainingMins > 0) "Quick Block — ${remainingMins}m remaining"
                                    else "Quick Block active"
+            REASON_TAMPER_SHIELD -> "Freezer and Settings are protected to keep your block active."
             else -> "$appName — daily quota reached"
         }
 

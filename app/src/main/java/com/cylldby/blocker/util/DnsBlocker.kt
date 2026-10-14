@@ -5,8 +5,16 @@ package com.cylldby.blocker.util
  */
 object DnsBlocker {
 
+    // Core adult keywords to block unconditionally at the DNS layer
+    private val ADULT_KEYWORDS = listOf(
+        "porn", "xxx", "nsfw", "adult", "sex", "hentai", "xhamster", "xvideos", "pornhub",
+        "redtube", "youporn", "brazzers", "chaturbate", "stripchat", "onlyfans", "cam4",
+        "livejasmin", "erome", "erotic", "nude", "hardcore", "rule34", "beeg", "tubegalore"
+    )
+
     fun isDomainBlocked(domain: String, blockedDomains: Set<String>): Boolean {
         val lower = domain.lowercase()
+        if (ADULT_KEYWORDS.any { lower.contains(it) }) return true
         return blockedDomains.any { blocked -> lower == blocked || lower.endsWith(".$blocked") }
     }
 
